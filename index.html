@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>slangtoy — a Slang shader playground</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="brand">slangtoy</span>
+      <span class="tagline">write Slang, watch it run on WebGPU</span>
+      <span class="spacer"></span>
+      <span class="status mono" id="status">booting</span>
+    </header>
+
+    <main class="split">
+      <section class="pane pane-edit">
+        <div class="pane-head">
+          <span class="label mono">shader.slang</span>
+        </div>
+        <div id="editor" class="editor-host"></div>
+        <div class="pane-foot">
+          <div id="diagnostics" class="diagnostics mono"></div>
+        </div>
+      </section>
+
+      <section class="pane pane-view">
+        <div class="pane-head">
+          <span class="label mono">output</span>
+        </div>
+        <div class="canvas-host" id="canvas-host">
+          <canvas id="gpu-canvas"></canvas>
+          <div class="overlay" id="overlay" hidden>
+            <div class="overlay-card">
+              <p id="overlay-text"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
