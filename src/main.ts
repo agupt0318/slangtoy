@@ -1,8 +1,9 @@
-// slangtoy entry point. Boots the WebGPU host; the Slang compiler and editor
-// arrive in later commits, so for now the fragment stage is hand-written WGSL.
+// slangtoy entry point: boots WebGPU, loads the Slang compiler, and keeps the
+// editor, compiler, and render loop in step.
 
 import { GpuHost, UnsupportedError } from './gpu';
 import { Editor } from './editor';
+import { SlangCompiler, ENTRY_POINT, type Diag } from './compiler';
 
 const statusEl = document.querySelector<HTMLElement>('#status')!;
 const overlayEl = document.querySelector<HTMLElement>('#overlay')!;
@@ -22,7 +23,7 @@ const DEFAULT_SLANG = `struct Uniforms
 ConstantBuffer<Uniforms> u;
 
 [shader("fragment")]
-float4 imageMain(float4 fragCoord : SV_Position) : SV_Target
+float4 ${ENTRY_POINT}(float4 fragCoord : SV_Position) : SV_Target
 {
     // WebGPU puts y at the top, so flip it to get Shadertoy-style coords.
     float2 uv = fragCoord.xy / u.resolution;
@@ -45,25 +46,16 @@ function showOverlay(html: string): void {
   overlayEl.hidden = false;
 }
 
-/** Placeholder fragment stage: what the Slang compiler will emit in commit 5. */
-const PLACEHOLDER_WGSL = /* wgsl */ `
-struct Uniforms {
-  mouse: vec4f,
-  resolution: vec2f,
-  time: f32,
-  frame: u32,
-};
-@group(0) @binding(0) var<uniform> u: Uniforms;
-
-@fragment
-fn imageMain(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
-  var uv = fragCoord.xy / u.resolution;
-  uv.y = 1.0 - uv.y;
-  let phase = vec3f(0.0, 2.0, 4.0);
-  let c = 0.5 + 0.5 * cos(u.time + (uv.x + uv.y) * 6.0 + phase);
-  return vec4f(c, 1.0);
+function renderDiagnostics(items: Diag[]): void {
+  diagnosticsEl.replaceChildren(
+    ...items.map((d) => {
+      const row = document.createElement('div');
+      row.className = d.severity === 'warning' ? 'diag-warn' : 'diag-error';
+      row.textContent = (d.line ? `line ${d.line}: ` : '') + d.message;
+      return row;
+    }),
+  );
 }
-`;
 
 async function boot(): Promise<void> {
   const host = new GpuHost(canvas);
@@ -82,19 +74,46 @@ async function boot(): Promise<void> {
     throw e;
   }
 
-  const errors = await host.setFragmentShader(PLACEHOLDER_WGSL, 'imageMain');
-  if (errors.length) {
-    setStatus('shader error', 'error');
-    diagnosticsEl.innerHTML = errors
-      .map((e) => `<div class="diag-error">${e.line ? `line ${e.line}: ` : ''}${e.message}</div>`)
-      .join('');
-    return;
-  }
-  setStatus('running', 'ok');
+  const compiler = new SlangCompiler();
+  setStatus('downloading slang');
+  await compiler.load((loaded, total) => {
+    const mb = (loaded / 1e6).toFixed(1);
+    setStatus(total ? `downloading slang ${Math.round((loaded / total) * 100)}%` : `downloading slang ${mb} MB`);
+  });
+  setStatus(`slang ${compiler.version} ready`);
 
-  // The editor is live, but nothing consumes its text until the Slang compiler
-  // lands in the next commits.
-  new Editor(editorHost, DEFAULT_SLANG, () => setStatus('edited (not compiled yet)'));
+  const editor = new Editor(editorHost, DEFAULT_SLANG, schedule);
+  let pending: number | undefined;
+
+  function schedule(): void {
+    window.clearTimeout(pending);
+    pending = window.setTimeout(run, 300);
+  }
+
+  async function run(): Promise<void> {
+    setStatus('compiling');
+    const result = compiler.compile(editor.doc);
+    if (!result.ok) {
+      setStatus('slang error', 'error');
+      renderDiagnostics(result.diagnostics);
+      editor.setDiagnostics(result.diagnostics);
+      return;
+    }
+
+    const gpuErrors = await host.setFragmentShader(result.wgsl, result.entryName);
+    if (gpuErrors.length) {
+      setStatus('wgsl rejected', 'error');
+      renderDiagnostics(gpuErrors.map((e) => ({ ...e, severity: 'error' as const })));
+      editor.setDiagnostics([]);
+      return;
+    }
+
+    setStatus('running', 'ok');
+    renderDiagnostics([]);
+    editor.setDiagnostics([]);
+  }
+
+  await run();
 }
 
 boot().catch((e) => {
