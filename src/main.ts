@@ -2,12 +2,37 @@
 // arrive in later commits, so for now the fragment stage is hand-written WGSL.
 
 import { GpuHost, UnsupportedError } from './gpu';
+import { Editor } from './editor';
 
 const statusEl = document.querySelector<HTMLElement>('#status')!;
 const overlayEl = document.querySelector<HTMLElement>('#overlay')!;
 const overlayTextEl = document.querySelector<HTMLElement>('#overlay-text')!;
 const diagnosticsEl = document.querySelector<HTMLElement>('#diagnostics')!;
+const editorHost = document.querySelector<HTMLElement>('#editor')!;
 const canvas = document.querySelector<HTMLCanvasElement>('#gpu-canvas')!;
+
+/** The shader contract, spelled out in full so editor lines map 1:1 to compiler lines. */
+const DEFAULT_SLANG = `struct Uniforms
+{
+    float4 mouse;       // xy: cursor while pressed, zw: last press (negated when up)
+    float2 resolution;  // canvas size in pixels
+    float  time;        // seconds since the shader started
+    uint   frame;       // frames drawn
+};
+ConstantBuffer<Uniforms> u;
+
+[shader("fragment")]
+float4 imageMain(float4 fragCoord : SV_Position) : SV_Target
+{
+    // WebGPU puts y at the top, so flip it to get Shadertoy-style coords.
+    float2 uv = fragCoord.xy / u.resolution;
+    uv.y = 1.0 - uv.y;
+
+    float3 phase = float3(0.0, 2.0, 4.0);
+    float3 color = 0.5 + 0.5 * cos(u.time + (uv.x + uv.y) * 6.0 + phase);
+    return float4(color, 1.0);
+}
+`;
 
 function setStatus(text: string, state?: 'ok' | 'error'): void {
   statusEl.textContent = text;
@@ -66,6 +91,10 @@ async function boot(): Promise<void> {
     return;
   }
   setStatus('running', 'ok');
+
+  // The editor is live, but nothing consumes its text until the Slang compiler
+  // lands in the next commits.
+  new Editor(editorHost, DEFAULT_SLANG, () => setStatus('edited (not compiled yet)'));
 }
 
 boot().catch((e) => {
