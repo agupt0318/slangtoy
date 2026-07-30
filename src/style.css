@@ -120,6 +120,40 @@ html, body {
 .diag-error { color: var(--error); }
 .diag-warn { color: var(--accent); }
 
+/* ---- generated-code tabs ---- */
+.tabs { display: flex; gap: 4px; }
+.tabs button {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button.is-active {
+  color: var(--accent);
+  border-color: var(--line);
+  background: var(--bg-2);
+}
+
+.generated {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  white-space: pre;
+  tab-size: 4;
+}
+.generated[hidden] { display: none; }
+
 /* ---- canvas ---- */
 .canvas-host {
   position: relative;

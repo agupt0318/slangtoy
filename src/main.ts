@@ -6,6 +6,7 @@ import { Editor } from './editor';
 import { SlangCompiler, type Diag } from './compiler';
 import { EXAMPLES, DEFAULT_EXAMPLE, findExample } from './examples';
 import { encodeShareUrl, decodeShareUrl } from './share';
+import { Inspector } from './inspector';
 
 const statusEl = document.querySelector<HTMLElement>('#status')!;
 const overlayEl = document.querySelector<HTMLElement>('#overlay')!;
@@ -15,6 +16,9 @@ const editorHost = document.querySelector<HTMLElement>('#editor')!;
 const canvas = document.querySelector<HTMLCanvasElement>('#gpu-canvas')!;
 const pickerEl = document.querySelector<HTMLSelectElement>('#example-picker')!;
 const shareEl = document.querySelector<HTMLButtonElement>('#share')!;
+const tabsEl = document.querySelector<HTMLElement>('#tabs')!;
+const canvasHostEl = document.querySelector<HTMLElement>('#canvas-host')!;
+const generatedEl = document.querySelector<HTMLElement>('#generated')!;
 
 function setStatus(text: string, state?: 'ok' | 'error'): void {
   statusEl.textContent = text;
@@ -66,6 +70,7 @@ async function boot(): Promise<void> {
   // A shared link wins over the default; a broken one silently falls back.
   const shared = await decodeShareUrl();
   const editor = new Editor(editorHost, shared ?? DEFAULT_EXAMPLE.source, schedule);
+  const inspector = new Inspector(tabsEl, canvasHostEl, generatedEl, compiler);
   let pending: number | undefined;
 
   for (const example of EXAMPLES) {
@@ -128,6 +133,7 @@ async function boot(): Promise<void> {
     setStatus('running', 'ok');
     renderDiagnostics([]);
     editor.setDiagnostics([]);
+    inspector.setSource(editor.doc);
   }
 
   await run();
