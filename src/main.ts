@@ -3,7 +3,9 @@
 
 import { GpuHost, UnsupportedError } from './gpu';
 import { Editor } from './editor';
-import { SlangCompiler, ENTRY_POINT, type Diag } from './compiler';
+import { SlangCompiler, type Diag } from './compiler';
+import { EXAMPLES, DEFAULT_EXAMPLE, findExample } from './examples';
+import { encodeShareUrl, decodeShareUrl } from './share';
 
 const statusEl = document.querySelector<HTMLElement>('#status')!;
 const overlayEl = document.querySelector<HTMLElement>('#overlay')!;
@@ -11,29 +13,8 @@ const overlayTextEl = document.querySelector<HTMLElement>('#overlay-text')!;
 const diagnosticsEl = document.querySelector<HTMLElement>('#diagnostics')!;
 const editorHost = document.querySelector<HTMLElement>('#editor')!;
 const canvas = document.querySelector<HTMLCanvasElement>('#gpu-canvas')!;
-
-/** The shader contract, spelled out in full so editor lines map 1:1 to compiler lines. */
-const DEFAULT_SLANG = `struct Uniforms
-{
-    float4 mouse;       // xy: cursor while pressed, zw: last press (negated when up)
-    float2 resolution;  // canvas size in pixels
-    float  time;        // seconds since the shader started
-    uint   frame;       // frames drawn
-};
-ConstantBuffer<Uniforms> u;
-
-[shader("fragment")]
-float4 ${ENTRY_POINT}(float4 fragCoord : SV_Position) : SV_Target
-{
-    // WebGPU puts y at the top, so flip it to get Shadertoy-style coords.
-    float2 uv = fragCoord.xy / u.resolution;
-    uv.y = 1.0 - uv.y;
-
-    float3 phase = float3(0.0, 2.0, 4.0);
-    float3 color = 0.5 + 0.5 * cos(u.time + (uv.x + uv.y) * 6.0 + phase);
-    return float4(color, 1.0);
-}
-`;
+const pickerEl = document.querySelector<HTMLSelectElement>('#example-picker')!;
+const shareEl = document.querySelector<HTMLButtonElement>('#share')!;
 
 function setStatus(text: string, state?: 'ok' | 'error'): void {
   statusEl.textContent = text;
@@ -82,8 +63,44 @@ async function boot(): Promise<void> {
   });
   setStatus(`slang ${compiler.version} ready`);
 
-  const editor = new Editor(editorHost, DEFAULT_SLANG, schedule);
+  // A shared link wins over the default; a broken one silently falls back.
+  const shared = await decodeShareUrl();
+  const editor = new Editor(editorHost, shared ?? DEFAULT_EXAMPLE.source, schedule);
   let pending: number | undefined;
+
+  for (const example of EXAMPLES) {
+    const option = document.createElement('option');
+    option.value = example.id;
+    option.textContent = example.label;
+    pickerEl.appendChild(option);
+  }
+  if (shared) {
+    const custom = document.createElement('option');
+    custom.value = 'shared';
+    custom.textContent = 'shared link';
+    pickerEl.appendChild(custom);
+    pickerEl.value = 'shared';
+  }
+
+  pickerEl.addEventListener('change', () => {
+    const example = findExample(pickerEl.value);
+    if (!example) return;
+    // Loading an example invalidates the hash the page was opened with.
+    history.replaceState(null, '', location.pathname);
+    editor.setDoc(example.source);
+  });
+
+  shareEl.addEventListener('click', async () => {
+    const url = await encodeShareUrl(editor.doc);
+    history.replaceState(null, '', url);
+    try {
+      await navigator.clipboard.writeText(url);
+      shareEl.textContent = 'copied';
+    } catch {
+      shareEl.textContent = 'link in url bar';
+    }
+    window.setTimeout(() => { shareEl.textContent = 'copy link'; }, 1600);
+  });
 
   function schedule(): void {
     window.clearTimeout(pending);

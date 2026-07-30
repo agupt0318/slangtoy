@@ -77,6 +77,21 @@ html, body {
 }
 .label { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.04em; }
 
+/* ---- pane-head controls ---- */
+.pane-head select,
+.pane-head button {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.pane-head select:hover,
+.pane-head button:hover { border-color: var(--accent); color: var(--accent); }
+
 .editor-host {
   flex: 1 1 auto;
   min-height: 0;
