@@ -111,10 +111,14 @@ export class GpuHost {
 
   private observeSize(): void {
     const resize = () => {
+      // While the canvas is display:none (the generated-code tabs hide it) the
+      // observer reports 0x0. Keep the last real size instead of collapsing.
+      if (this.canvas.clientWidth === 0 || this.canvas.clientHeight === 0) return;
+
       const dpr = window.devicePixelRatio || 1;
       const max = this.device.limits.maxTextureDimension2D;
-      const w = Math.max(1, Math.min(max, Math.round(this.canvas.clientWidth * dpr)));
-      const h = Math.max(1, Math.min(max, Math.round(this.canvas.clientHeight * dpr)));
+      const w = Math.min(max, Math.round(this.canvas.clientWidth * dpr));
+      const h = Math.min(max, Math.round(this.canvas.clientHeight * dpr));
       if (this.canvas.width !== w || this.canvas.height !== h) {
         this.canvas.width = w;
         this.canvas.height = h;
