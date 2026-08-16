@@ -5,6 +5,7 @@ import { GpuHost, UnsupportedError } from './gpu';
 import { Editor } from './editor';
 import { SlangCompiler, type Diag } from './compiler';
 import { EXAMPLES, DEFAULT_EXAMPLE, findExample } from './examples';
+import { compileFast } from './minislang';
 import { encodeShareUrl, decodeShareUrl } from './share';
 import { Inspector } from './inspector';
 
@@ -112,17 +113,36 @@ async function boot(): Promise<void> {
   }
 
   async function run(): Promise<void> {
-    // Edits made while the compiler is still downloading are picked up by the
-    // run() that fires once load() resolves, so dropping them here is safe.
-    if (!ready) return;
-    setStatus('compiling');
-    const result = compiler.compile(editor.doc);
-    if (!result.ok) {
-      setStatus('slang error', 'error');
-      renderDiagnostics(result.diagnostics);
-      editor.setDiagnostics(result.diagnostics);
-      return;
+    // Until the official compiler finishes downloading, the built-in fast path
+    // handles the subset it is confident about so the first frame does not wait
+    // on 9.7 MB. Once the real compiler is ready it becomes the only source of
+    // truth, so any gap in the subset is transient rather than baked in.
+    let wgsl: string;
+    let entryName: string;
+    if (ready) {
+      setStatus('compiling');
+      const result = compiler.compile(editor.doc);
+      if (!result.ok) {
+        setStatus('slang error', 'error');
+        renderDiagnostics(result.diagnostics);
+        editor.setDiagnostics(result.diagnostics);
+        return;
+      }
+      wgsl = result.wgsl;
+      entryName = result.entryName;
+    } else {
+      const fast = compileFast(editor.doc);
+      if (!fast.ok) {
+        // Not an error the user needs to act on: the real compiler is coming.
+        setStatus('waiting for slang');
+        return;
+      }
+      setStatus('compiling (fast path)');
+      wgsl = fast.wgsl;
+      entryName = fast.entryName;
     }
+
+    const result = { wgsl, entryName };
 
     const gpuErrors = await host.setFragmentShader(result.wgsl, result.entryName);
     if (gpuErrors.length) {
