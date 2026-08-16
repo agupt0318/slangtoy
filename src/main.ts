@@ -59,13 +59,12 @@ async function boot(): Promise<void> {
     throw e;
   }
 
+  // The editor comes up BEFORE the compiler download. Constructing SlangCompiler
+  // is cheap; load() is the multi-megabyte part. Awaiting load() first left the
+  // editor unbuilt for the whole download, so a cold visit showed an empty pane
+  // and an empty canvas for tens of seconds, which reads as a broken page.
   const compiler = new SlangCompiler();
-  setStatus('downloading slang');
-  await compiler.load((loaded, total) => {
-    const mb = (loaded / 1e6).toFixed(1);
-    setStatus(total ? `downloading slang ${Math.round((loaded / total) * 100)}%` : `downloading slang ${mb} MB`);
-  });
-  setStatus(`slang ${compiler.version} ready`);
+  let ready = false;
 
   // A shared link wins over the default; a broken one silently falls back.
   const shared = await decodeShareUrl();
@@ -113,6 +112,9 @@ async function boot(): Promise<void> {
   }
 
   async function run(): Promise<void> {
+    // Edits made while the compiler is still downloading are picked up by the
+    // run() that fires once load() resolves, so dropping them here is safe.
+    if (!ready) return;
     setStatus('compiling');
     const result = compiler.compile(editor.doc);
     if (!result.ok) {
@@ -135,6 +137,14 @@ async function boot(): Promise<void> {
     editor.setDiagnostics([]);
     inspector.setSource(editor.doc);
   }
+
+  setStatus('downloading slang');
+  await compiler.load((loaded, total) => {
+    const mb = (loaded / 1e6).toFixed(1);
+    setStatus(total ? `downloading slang ${Math.round((loaded / total) * 100)}%` : `downloading slang ${mb} MB`);
+  });
+  ready = true;
+  setStatus(`slang ${compiler.version} ready`);
 
   await run();
 }
