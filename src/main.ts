@@ -158,6 +158,10 @@ async function boot(): Promise<void> {
     inspector.setSource(editor.doc);
   }
 
+  // First paint goes through the fast path; without this the fast branch in
+  // run() is unreachable, since the next run() happens after the download.
+  await run();
+
   setStatus('downloading slang');
   await compiler.load((loaded, total) => {
     const mb = (loaded / 1e6).toFixed(1);
