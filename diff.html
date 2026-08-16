@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>slangtoy — fast path vs official Slang</title>
+    <style>
+      body { background:#14161a; color:#d8dee9; font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; margin:0; padding:24px 28px; }
+      h1 { font-size:15px; font-weight:600; color:#e8a33d; margin:0 0 2px; }
+      p { margin:0 0 18px; color:#8b93a1; }
+      pre { white-space:pre-wrap; margin:0; }
+      .good { color:#8fbf6f; } .bad { color:#e06c6c; } .skip { color:#8b93a1; }
+      #progress { color:#8b93a1; }
+    </style>
+  </head>
+  <body>
+    <h1>fast path vs official Slang</h1>
+    <p>
+      Both compilers translate the same source; both results render at identical
+      uniforms into a 256&times;256 texture and the pixels are compared.
+      <span id="progress"></span>
+    </p>
+    <pre id="out"></pre>
+    <script type="module" src="/src/diff.ts"></script>
+  </body>
+</html>

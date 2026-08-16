@@ -6,5 +6,10 @@ export default defineConfig({
   base: './',
   build: {
     target: 'esnext',
+    rollupOptions: {
+      // diff.html is the differential test harness; it ships with the site so
+      // the comparison can be re-run against the deployed build.
+      input: { main: 'index.html', diff: 'diff.html' },
+    },
   },
 });
