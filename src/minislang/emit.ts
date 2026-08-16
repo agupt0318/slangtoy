@@ -54,6 +54,67 @@ function typeCtor(name: string): string | null {
 
 const SWIZZLE = /^[xyzwrgba]{1,4}$/;
 
+/** Root identifier of an assignment target, e.g. 'p' in p.xy[0]. */
+function rootIdent(e: Expr): string | null {
+  let cur: Expr = e;
+  for (;;) {
+    if (cur.k === 'ident') return cur.name;
+    if (cur.k === 'member' || cur.k === 'index') { cur = cur.target; continue; }
+    return null;
+  }
+}
+
+/**
+ * Names written to anywhere in a body. Slang parameters are mutable by-value
+ * copies and WGSL parameters are immutable, so a parameter that is assigned
+ * needs a local copy or the WGSL is rejected.
+ */
+function assignedNames(body: Stmt[]): Set<string> {
+  const found = new Set<string>();
+  const visitExpr = (e: Expr): void => {
+    switch (e.k) {
+      case 'assign': {
+        const root = rootIdent(e.target);
+        if (root) found.add(root);
+        visitExpr(e.target); visitExpr(e.value);
+        return;
+      }
+      case 'incdec': {
+        const root = rootIdent(e.target);
+        if (root) found.add(root);
+        visitExpr(e.target);
+        return;
+      }
+      case 'member': visitExpr(e.target); return;
+      case 'index': visitExpr(e.target); visitExpr(e.index); return;
+      case 'unary': visitExpr(e.operand); return;
+      case 'binary': visitExpr(e.left); visitExpr(e.right); return;
+      case 'ternary': visitExpr(e.cond); visitExpr(e.then); visitExpr(e.else); return;
+      case 'call': e.args.forEach(visitExpr); return;
+      default: return;
+    }
+  };
+  const visitStmt = (s: Stmt): void => {
+    switch (s.k) {
+      case 'var': if (s.init) visitExpr(s.init); return;
+      case 'expr': visitExpr(s.expr); return;
+      case 'if': visitExpr(s.cond); visitStmt(s.then); if (s.else) visitStmt(s.else); return;
+      case 'for':
+        if (s.init) visitStmt(s.init);
+        if (s.cond) visitExpr(s.cond);
+        if (s.step) visitExpr(s.step);
+        visitStmt(s.body);
+        return;
+      case 'while': visitExpr(s.cond); visitStmt(s.body); return;
+      case 'return': if (s.value) visitExpr(s.value); return;
+      case 'block': s.body.forEach(visitStmt); return;
+      default: return;
+    }
+  };
+  body.forEach(visitStmt);
+  return found;
+}
+
 export class Emitter {
   private out: string[] = [];
   private funcNames = new Set<string>();
@@ -115,14 +176,16 @@ export class Emitter {
       this.line('@fragment');
     }
 
+    const mutated = assignedNames(f.body);
     const params = f.params.map((p) => {
       const type = typeToWgsl(p.type);
+      const name = mutated.has(p.name) ? `${p.name}_in` : p.name;
       if (!isEntry) {
         if (p.semantic) throw new Unsupported('semantics are only supported on the entry point', p.pos);
-        return `${p.name}: ${type}`;
+        return `${name}: ${type}`;
       }
       const sem = (p.semantic ?? '').toLowerCase();
-      if (sem === 'sv_position') return `@builtin(position) ${p.name}: ${type}`;
+      if (sem === 'sv_position') return `@builtin(position) ${name}: ${type}`;
       throw new Unsupported(`entry parameter semantic '${p.semantic ?? 'none'}' is outside the fast-path subset`, p.pos);
     });
 
@@ -141,6 +204,10 @@ export class Emitter {
     }
 
     this.line(`fn ${f.name}(${params.join(', ')})${ret} {`);
+    // Restore the by-value-copy semantics Slang gives parameters.
+    for (const p of f.params) {
+      if (mutated.has(p.name)) this.line(`  var ${p.name} = ${p.name}_in;`);
+    }
     for (const s of f.body) this.stmt(s, 1);
     this.line('}');
     this.line();
