@@ -4,8 +4,9 @@
 import { inflate } from 'pako';
 import type { MainModule, GlobalSession } from './vendor/slang-wasm';
 
-/** Served straight from public/, so the 9 MB payload never enters a JS bundle. */
-const WASM_URL = '/slang-wasm.wasm.gz';
+/** Served straight from public/, so the 9 MB payload never enters a JS bundle.
+ *  BASE_URL keeps it correct under a project-pages path as well as at a root. */
+const WASM_URL = `${import.meta.env.BASE_URL}slang-wasm.wasm.gz`;
 
 /** Stage constant Slang uses for fragment/pixel entry points (SLANG_STAGE_FRAGMENT). */
 const STAGE_FRAGMENT = 5;
